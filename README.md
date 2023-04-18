@@ -2,9 +2,13 @@
 
 Need to add values (vcenter) in install.env.sh and install-config.yaml-vcenter
 
+Fetch openshift installer and specify value in install.env.sh
+
 Need to add values (certs, pull secret) in install-config.yaml-vcenter
 
 Need to add values (vips, mac addresses, ip, dns, gateway) in install.env.$cluster.sh (ex install.env.vc2.sh)
+
+Fetch openshift ova and push it to datastore (cf install.sh)
 
 Start install with : sh install.sh $cluster (ex: sh install.sh vc2)
 
