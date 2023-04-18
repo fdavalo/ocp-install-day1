@@ -1,0 +1,1 @@
+# ocp-install-day1
