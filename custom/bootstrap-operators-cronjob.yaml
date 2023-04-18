@@ -1,0 +1,36 @@
+kind: CronJob
+apiVersion: batch/v1
+metadata:
+  name: bootstrap-operators
+  namespace: openshift-operator-lifecycle-manager
+spec:
+  schedule: '*/5 * * * *'
+  concurrencyPolicy: Replace
+  suspend: false
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: olm-operator-serviceaccount
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: cli
+              image: ubi8/ubi
+              command: ["sh", "/script/run.sh"]
+              securityContext:
+                capabilities:
+                  drop:
+                    - ALL
+                allowPrivilegeEscalation: false
+              volumeMounts:
+                - name: script
+                  mountPath: "/script"
+          volumes:
+            - name: script
+              configMap:
+                name: bootstrap-operators-script
+                defaultMode: 0777

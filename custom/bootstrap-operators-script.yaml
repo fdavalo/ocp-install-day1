@@ -1,0 +1,100 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bootstrap-operators-script
+  namespace: openshift-operator-lifecycle-manager
+data:
+  operators: @operators@
+  run.sh: |
+    #!/bin/bash
+    
+    set -x 
+
+    cd /tmp 
+
+    # should be in the cronjob image, for simplicity downloads are explicit here
+    curl http://downloads.openshift-console.svc.cluster.local/amd64/linux/oc.tar -o /tmp/oc.tar
+
+    tar xvf /tmp/oc.tar
+
+    chmod +x ./oc
+
+    # should be in the cronjob image, for simplicity downloads are explicit here
+    curl -L https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64 -o /tmp/jq
+
+    chmod +x ./jq
+
+    NS=openshift-operator-lifecycle-manager
+
+    for cm in `awk -F\, '{for (i=1;i<=NF;i++) print $i;}' /script/operators`; do
+         
+      ons=`./oc get configmap $cm -n $NS -o json | ./jq -r .data.namespace | ./oc apply -f - 2>&1 | awk '{if ($1 == "error:") print "null/openshift-operators"; else print $1;}' | awk -F/ '{print $2;}'` 
+
+      ./oc get configmap $cm -n $NS -o json | ./jq -r .data.operatorgroup | ./oc apply -f - 
+      
+      sub=`./oc get configmap $cm -n $NS -o json | ./jq -r .data.subscription | ./oc apply -f - 2>&1 | awk '{if ($1 == "error:") print "null/null"; else print $1;}' | awk -F/ '{print $2;}'`
+
+      if [[ "$sub" == "null" ]]; then 
+      
+        ./oc get configmap $cm -n $NS -o json | ./jq -r .data.yaml | ./oc apply -f -
+
+        ./oc get configmap $cm -n $NS -o json | ./jq -r .data.crds | ./oc apply -f -
+
+        continue
+
+      fi
+
+      while [[ 1 ]]; do
+     
+        csv=`./oc get subscription.operators.coreos.com/$sub -n $ons -o json | ./jq -r .status.installedCSV`
+
+        if [[ "$csv" != "null" ]] && [[ "$csv" != "" ]]; then break; fi
+
+        csv=`./oc get subscription.operators.coreos.com/$sub -n $ons -o json | ./jq -r .status.currentCSV`
+
+        if [[ "$csv" != "null" ]] && [[ "$csv" != "" ]]; then
+
+          inp=`./oc get subscription.operators.coreos.com/$sub -n $ons -o json | ./jq -r .status.installplan.name`
+
+          if [[ `./oc get installplan $inp -n $ons -o json | ./jq -r .spec.approval` == "Manual" ]]; then
+   
+            if [[ `./oc get installplan $inp -n $ons -o json | ./jq -r .spec.approved` == "false" ]]; then
+ 
+              ./oc patch installplan $inp -n $ons --type merge --patch '{"spec":{"approved":true}}'
+
+            fi
+
+          fi
+
+          while [[ 1 ]]; do
+     
+            phase=`./oc get csv $csv -n $ons -o json | ./jq -r .status.phase`
+
+            if [[ "$phase" == "Succeeded" ]]; then break; fi
+
+            sleep 30
+      
+          done
+
+          break
+
+        fi
+
+        sleep 30
+      
+      done
+
+      plg=`./oc get configmap $cm -n $NS -o json | ./jq -r .data.consoleplugin`
+
+      if [[ "$plg" != "null" ]] && [[ "$plg" != "" ]]; then
+     
+        ./oc get consoles.operator.openshift.io cluster -o json | ./jq ".spec.plugins += [\"$plg\"]" | ./oc apply -f -
+
+      fi
+
+      ./oc get configmap $cm -n $NS -o json | ./jq -r .data.crds | ./oc apply -f -
+
+    done
+
+    exit 0
+ 

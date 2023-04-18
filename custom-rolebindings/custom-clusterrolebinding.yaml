@@ -1,0 +1,19 @@
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: bootstrap-operators
+subjects:
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: 'system:node:master-0-@cluster@'
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: 'system:node:master-1-@cluster@'
+  - kind: User
+    apiGroup: rbac.authorization.k8s.io
+    name: 'system:node:master-2-@cluster@'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bootstrap-operators
+
